@@ -1,120 +1,204 @@
 # IntelliValidate
 
-## IntelliValidate scan reports
+### Intelligent Infrastructure-as-Code Validation Framework for Smart Manufacturing Using Large Language Models
 
-The Express backend writes successful Checkov scan reports to the private
-`intellvalidate-reports-project` S3 bucket in `us-east-1`. Reports are stored as
-JSON objects under `scan-reports/` with AES-256 server-side encryption. IaC
-source files are not uploaded.
+IntelliValidate is a cloud-integrated Infrastructure-as-Code (IaC) security validation framework that identifies security misconfigurations in Terraform files. It combines automated security scanning, AI-assisted analysis, security scoring, and Amazon S3 report storage in one application.
 
-The backend uses the AWS SDK default credential provider chain. Configure AWS
-credentials through an AWS CLI profile or another supported provider; never put
-access keys in the frontend or commit them to the repository. To configure the
-backend, copy `backend/.env.example` to `backend/.env` and adjust the region,
-bucket, or optional `AWS_PROFILE` as needed.
+## Key Features
 
-The runtime identity needs report-write access and read-only permission to list
-objects under the report prefix for the Reports page. Keep S3 Block Public
-Access enabled and do not grant public access.
+- **Terraform Validation:** Upload Terraform files for security analysis.
+- **Automated Security Scanning:** Use Checkov to identify infrastructure security misconfigurations.
+- **AI-Powered Analysis:** Use Ollama with the `qwen2.5:3b` model to explain findings and suggest remediation steps.
+- **Security Scoring:** Calculate a security score based on failed Checkov findings and their severity.
+- **Reports History:** Browse previous scan reports and view individual report details.
+- **AWS Cloud Storage:** Store JSON scan reports in a private Amazon S3 bucket.
+- **Secure Design:** Keep Terraform source files out of S3 report storage and use backend endpoints to access saved reports.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::intellvalidate-reports-project/scan-reports/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::intellvalidate-reports-project/scan-reports/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::intellvalidate-reports-project",
-      "Condition": {
-        "StringEquals": {
-          "s3:prefix": "scan-reports/"
-        }
-      }
-    }
-  ]
-}
+## Architecture
+
+```text
+                User
+                 |
+                 v
+         React + Vite Frontend
+                 |
+              API Request
+                 |
+                 v
+         Node.js + Express
+                 |
+          +------+------+
+          |             |
+          v             v
+        Checkov       Ollama
+     Security Scan   AI Analysis
+          |             |
+          +------+------+
+                 |
+                 v
+          Security Scoring
+                 |
+                 v
+           JSON Report
+                 |
+                 v
+           Amazon S3
+                 |
+                 v
+          Reports History
 ```
 
-The Reports page calls the backend's read-only `GET /api/reports` endpoint.
-The backend reads each listed JSON report to display its own saved filename,
-score, finding count, and AI status. `GET /api/reports/:reportId` reads details
-for one listed report; it returns only reports under the fixed
-`scan-reports/` prefix and does not expose arbitrary S3 object access.
-The list is sorted by S3 modification time and returned in 50-report pages;
-use **Load older reports** to continue through the complete history. Page
-cursors are temporary, so refresh the list if a cursor expires.
+## Technology Stack
 
-### Security score
+| Component | Technology | Purpose |
+|---|---|---|
+| Frontend | React, Vite | User interface and dashboard |
+| Backend | Node.js, Express | API endpoints and scan workflow |
+| Security Scanner | Checkov | Terraform security validation |
+| AI Analysis | Ollama, `qwen2.5:3b` | Explanations and remediation suggestions |
+| Cloud Storage | Amazon S3 | Persistent JSON report storage |
+| Infrastructure | Terraform | Infrastructure configuration files |
+| Testing | Node.js test runner | Backend workflow and regression tests |
 
-The score starts at 100 and subtracts a fixed penalty for each failed
-Checkov finding: Critical 10, High 4, Medium 3, Low 1, and Unrated 2
-points. It is clamped at 0. Missing or unrecognized Checkov severity counts
-as Unrated and is never inferred from Ollama. Ollama assessment coverage and
-its suggested severity do not affect the score. Severity counts include each
-failed Checkov finding exactly once, including Unrated findings.
+## How It Works
 
-### Run locally
+1. The user uploads a Terraform file through the web interface.
+2. The Express backend receives the file and runs Checkov.
+3. Checkov identifies failed security checks and returns findings.
+4. Ollama analyzes findings and provides explanations and recommendations.
+5. The backend calculates a security score.
+6. The scan report is saved as a JSON object in Amazon S3.
+7. The frontend displays scan results, findings, and the security score.
+8. Users can browse report history and retrieve saved reports.
 
-In one terminal, start the backend:
+## Security Scoring
 
-```sh
+The score starts at **100** and subtracts a fixed penalty for each failed Checkov finding.
+
+| Severity | Penalty |
+|---|---:|
+| Critical | 10 |
+| High | 4 |
+| Medium | 3 |
+| Low | 1 |
+| Unrated | 2 |
+
+The score is clamped at zero. Each failed Checkov finding is counted once. Missing or unrecognized Checkov severity is treated as Unrated rather than inferred from the AI assessment. AI assessment coverage and AI-suggested severity do not affect the score.
+
+## AWS S3 Integration
+
+Scan reports are stored in a private Amazon S3 bucket.
+
+- **Bucket:** `intellvalidate-reports-project`
+- **Region:** `us-east-1`
+- **Storage prefix:** `scan-reports/`
+- **Format:** JSON
+- **Server-side encryption:** AES-256
+
+The backend uses the AWS SDK default credential provider chain. Reports can be listed and retrieved through backend endpoints restricted to the report prefix.
+
+Keep S3 Block Public Access enabled. Never commit AWS credentials, secret keys, or `.env` files to GitHub.
+
+## Prerequisites
+
+Install the following before running the project:
+
+- Node.js 20 or newer
+- npm
+- Python and Checkov
+- Ollama with the `qwen2.5:3b` model
+- AWS CLI or another supported AWS credential provider
+- An AWS identity with the required S3 permissions
+
+## Run Locally
+
+### 1. Install backend dependencies
+
+```bash
 cd backend
 npm install
+```
+
+If `backend/.env.example` exists, copy it to `backend/.env` and configure the required settings. Do not commit `.env` files.
+
+### 2. Start the backend
+
+From the `backend` directory:
+
+```bash
 node server.js
 ```
 
-In another terminal, start the frontend from the project root:
+### 3. Start Ollama
 
-```sh
+Ensure Ollama is running and the model is available:
+
+```bash
+ollama pull qwen2.5:3b
+```
+
+### 4. Start the frontend
+
+Open another terminal in the project root:
+
+```bash
 npm install
 npm run dev
 ```
 
-Checkov and Ollama (`qwen2.5:3b`) must also be installed and available locally
-for their respective scan and assessment steps. The backend dependencies
-require Node.js 20 or newer.
+Open the local URL displayed by Vite in your browser.
 
-### Verify an uploaded report
+Checkov and Ollama must be available locally for their respective processing steps.
 
-1. Configure the AWS CLI profile used by the backend and ensure it has the
-   `s3:PutObject` permission above.
-2. Start the backend and frontend, then upload a supported IaC file and run a
-   validation.
-3. In the Results page, confirm that **AWS S3 report** shows **Saved**.
-4. Confirm the API response contains `cloudStorage.status: "saved"` and note
-   its `cloudStorage.objectKey`.
-5. Inspect that object in the `us-east-1` bucket with the AWS CLI:
+## Verify S3 Report Storage
 
-   ```sh
-   aws s3api get-object --bucket intellvalidate-reports-project --key <objectKey> scan-report.json --region us-east-1
-   ```
+After running a scan, confirm that the application reports a successful S3 upload. You can inspect a report's metadata using:
 
-   The JSON includes the original filename, scan timestamp, Checkov findings,
-   security score, and Ollama assessment.
+```bash
+aws s3api head-object \
+  --bucket intellvalidate-reports-project \
+  --key "scan-reports/YOUR-REPORT.json" \
+  --region us-east-1
+```
 
-## Frontend scaffold
+Replace `YOUR-REPORT.json` with the actual report filename.
 
-This frontend uses React, Vite, and Oxlint.
+## Testing
 
-Currently, two official plugins are available:
+During development:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- All 24 backend tests passed.
+- All five backend source files passed Node.js syntax checks.
+- S3 report listing, pagination, and saved-report retrieval tests passed.
+- A live AWS S3 report upload and retrieval was separately verified.
 
-## React Compiler
+These results reflect the tested development version; results may vary if local services, credentials, or configuration change.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Project Structure
 
-## Expanding the Oxlint configuration
+```text
+IntelliValidate/
+├── backend/          # Express API and scan workflow
+├── public/            # Static assets
+├── shared/            # Shared application modules
+├── src/               # React frontend
+├── test-infrastructure-2.tf
+├── package.json
+├── package-lock.json
+├── vite.config.js
+├── .gitignore
+└── README.md
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Future Enhancements
+
+- Improve AI assessment coverage and handling of incomplete model responses.
+- Add report filtering and export features.
+- Expand infrastructure security policy coverage.
+- Explore cloud hosting for application components if required.
+
+## Project Objective
+
+IntelliValidate demonstrates how Infrastructure-as-Code security scanning, Large Language Model-assisted analysis, automated security scoring, and private cloud report storage can be integrated into a unified validation workflow for smart manufacturing infrastructure.
+
+**Project Title:** Intelligent Infrastructure-as-Code Validation Framework for Smart Manufacturing Using Large Language Models.
