@@ -1,0 +1,33 @@
+
+node_modules/
+backend/node_modules/
+
+.env
+.env.*
+!.env.example
+
+dist/
+__pycache__/
+.venv/
+venv/
+
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+*.log
+npm-debug.log*
+
+# Generated Checkov reports
+checkov-result.json
+**/*checkov*.json
+# Terraform local state and secrets
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# AWS credentials
+.aws/
+credentials
